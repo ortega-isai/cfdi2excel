@@ -1,12 +1,15 @@
 import os
 from threading import Thread
-from tkinter import Button, Frame, Label, Tk
+from tkinter import *
+# from tkinter import Checkbutton, Button, Frame, Label, Tk
 from tkinter.filedialog import askdirectory
 from tkinter.messagebox import askokcancel, showinfo
 from tkinter.ttk import Progressbar
 
 from lxml import etree
 from openpyxl import Workbook
+
+from cfdiclient import Validacion
 
 NSMAP = {
     'cfdi': 'http://www.sat.gob.mx/cfd/3',
@@ -61,9 +64,15 @@ class MainApplication(Frame):
 
         self.pgb_status = Progressbar(self)
         self.pgb_status.grid(
-            row=3, column=0, columnspan=3,
+            row=3, column=0, columnspan=2,
             sticky='ew', padx=10, pady=10
         )
+
+        self.c1_v1 = IntVar()
+        self.cb_valida = Checkbutton(
+            self, text='Valida SAT', onvalue=1, offvalue=0, variable=self.c1_v1
+        )
+        self.cb_valida.grid(row=3, column=2, sticky='ew', padx=10, pady=10)
 
         self.btn_procesar = Button(
             self, text='Procesar', command=self.btn_procesar_click
@@ -102,6 +111,7 @@ class MainApplication(Frame):
 
     def task_xml_to_excel(self):
         self.pgb_status.start()
+        validacion = Validacion()
 
         fuente_path = self.lbl_path_fuente['text']
         destino_path = self.lbl_path_destino['text']
@@ -124,6 +134,7 @@ class MainApplication(Frame):
                 'Tipo de cambio', 'Metodo pago', 'Forma pago', 'SubTotal', 'Descuento',
                 'IVA Trasladado', 'ISR Trasladado', 'IEPS Trasladado', 'IVA Retenido',
                 'ISR Retenido', 'Impuesto Local', 'Total', 'TipoRelacion', 'CfdiRelacionados',
+                'codigo_estatus', 'es_cancelable', 'estado'
             )
         )
 
@@ -210,7 +221,7 @@ class MainApplication(Frame):
                 iva = 0.0
                 isr = 0.0
                 ieps = 0.0
-                for t in root.findall('cfdi:Impuestos/cfdi:Traslados/cfdi:Traslado', namespaces=NSMAP):                    
+                for t in root.findall('cfdi:Impuestos/cfdi:Traslados/cfdi:Traslado', namespaces=NSMAP):
                     if t.get('Impuesto') == '002':
                         iva += float(t.get('Importe'))
                     if t.get('Impuesto') == '001':
@@ -227,33 +238,50 @@ class MainApplication(Frame):
                         isr_ret += float(t.get('Importe'))
 
                 total = root.get('Total')
-                
+
                 tipo_relacion = ''
                 relaciones = ''
 
-                cfdi_relacionados = root.find('cfdi:CfdiRelacionados', namespaces=NSMAP)
-                
+                cfdi_relacionados = root.find(
+                    'cfdi:CfdiRelacionados', namespaces=NSMAP)
+
                 if cfdi_relacionados is not None:
-                    
+
                     tipo_relacion = cfdi_relacionados.get('TipoRelacion')
 
                     for r in cfdi_relacionados.findall('cfdi:CfdiRelacionado', namespaces=NSMAP):
-                        relaciones += '{}, '.format(                        
+                        relaciones += '{}, '.format(
                             r.get('UUID')
                         )
-                
+
                 implocal = 0
 
                 for t in root.findall('cfdi:Complemento/implocal:ImpuestosLocales/implocal:TrasladosLocales', namespaces=NSMAP):
                     implocal += float(t.get('Importe'))
 
+                # teste de validacion con el SAT
+                if self.c1_v1.get() == 1:
+                    status = validacion.obtener_estado(
+                        rfc_emisor, rfc_receptor, total, uuid)
+
+                    codigo_estatus = status['codigo_estatus']
+                    es_cancelable = status['es_cancelable']
+                    estado = status['estado']
+                else:
+                    codigo_estatus = ''
+                    es_cancelable = ''
+                    estado = ''
+
+                print('uuid: {}, rfc_emisor: {}, rfc_receptor: {}, total: ${} -> {}'.format(
+                    uuid, rfc_emisor, rfc_receptor, total, estado))
                 sheet.append(
                     (
                         version, uuid, serie, folio, tipo, fecha,
                         fecha_timbrado, pac, rfc_emisor, nombre_emisor,
                         rfc_receptor, nombre_receptor, conceptos, uso, moneda,
                         tipo_cambio, metodo_pago, forma_pago, subtotal, descuento,
-                        iva, isr, ieps, iva_ret, isr_ret, implocal, total, tipo_relacion, relaciones
+                        iva, isr, ieps, iva_ret, isr_ret, implocal, total, tipo_relacion, relaciones,
+                        codigo_estatus, es_cancelable, estado
                     )
                 )
             except Exception as e:
