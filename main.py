@@ -1,7 +1,7 @@
 import os
 from threading import Thread
-from tkinter import *
-# from tkinter import Checkbutton, Button, Frame, Label, Tk
+# from tkinter import *
+from tkinter import Checkbutton, Button, Frame, Label, Tk, IntVar
 from tkinter.filedialog import askdirectory
 from tkinter.messagebox import askokcancel, showinfo
 from tkinter.ttk import Progressbar
